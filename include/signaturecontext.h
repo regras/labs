@@ -28,6 +28,7 @@
 #include <memory>
 
 #include "gpv.h"
+#include "abs.h"
 
 namespace lbcrypto {
 /**
@@ -60,15 +61,6 @@ namespace lbcrypto {
        */
       void KeyGen(LPSignKey<Element>* sk, LPVerificationKey<Element>* vk);
       /**
-       *@brief Method for signing a given plaintext
-       *@param pt Plaintext to be signed
-       *@param sk Sign key
-       *@param vk Verification key
-       *@param sign Signature corresponding to the plaintext - Output
-       */
-      void Sign(const LPSignPlaintext<Element>& pt, const LPSignKey<Element>& sk,
-                const LPVerificationKey<Element>& vk, LPSignature<Element>* sign);
-      /**
        *@brief Method for offline phase of signing a given plaintext
        *@param pt Plaintext to be signed
        *@param sk Sign key
@@ -91,25 +83,22 @@ namespace lbcrypto {
                            const PerturbationVector<Element> pv,
                            LPSignature<Element>* signatureText);
       /**
-       *@brief Method for verifying the plaintext and signature
-       *@param pt Plaintext
-       *@param signature Signature to be verified
-       *@param vk Key used for verification
-       *@return Verification result
-       */
-      bool Verify(const LPSignPlaintext<Element>& pt,
-                  const LPSignature<Element>& signature,
-                  const LPVerificationKey<Element>& vk);
-      /**
        *@brief Method for key generation
        *@param sk Signing key for sign operation - Output
        *@param vk Verification key for verify operation - Output
        */
       void Setup(LPSignKey<Element>* sk, LPVerificationKey<Element>* vk);
 
-      void Extract(const LPSignKey<Element>& sk,
-                   const LPVerificationKey<Element>& vk,
-                   vector<string> attributes);
+      vector<shared_ptr<Matrix<Poly>>> Extract(const LPSignKey<Element>& sk,
+                                               const LPVerificationKey<Element>& vk,
+                                               vector<string> attributes);
+      signatureABS Sign(const LPVerificationKey<Element>& vk,
+                                       vector<shared_ptr<Matrix<Poly>>> attributesKey,
+                                       vector<string> attributeList,
+                                       string message);
+      bool Verify(const LPVerificationKey<Element>& vk,
+                  signatureABS signature,
+                  string message);
 
     private:
       // The signature scheme used

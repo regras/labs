@@ -14,9 +14,9 @@
 
 using namespace lbcrypto;
 
-// Setups the Attribute Authority keys and public parameters
-// Dummy for now (using the GPV normal keygen)
-void setup() {}
+///////////////////////////////////////////////////////////////////////////////
+//                              Helper functions                             //
+///////////////////////////////////////////////////////////////////////////////
 
 // Public Syndrome matrix generator from a given set of attributes
 void attributeHashGenerator(vector<string> attributes, shared_ptr<GPVSignatureParameters<Poly>> m_params, Matrix<Poly> *attributesSyndrome) {
@@ -47,6 +47,32 @@ void attributeHashGenerator(vector<string> attributes, shared_ptr<GPVSignaturePa
     return;
 }
 
+// Public 32 bit digest
+uint32_t compactDigest(shared_ptr<GPVSignatureParameters<Poly>> m_params, string message) {
+    EncodingParams ep(std::make_shared<EncodingParamsImpl>(PlaintextModulus(512)));
+    vector<int64_t> digest;
+    uint32_t h = 0;
+
+    lbcrypto::HashUtil::Hash(message, lbcrypto::SHA_256, digest);
+    lbcrypto::Plaintext hashedText(std::make_shared<lbcrypto::CoefPackedEncoding>(
+                                       m_params->GetILParams(), ep, digest));
+
+    h += ((uint32_t)(digest[0] & 0xFF)) << 24;
+    h += ((uint32_t)(digest[1] & 0xFF)) << 16;
+    h += ((uint32_t)(digest[2] & 0xFF)) << 8;
+    h += ((uint32_t)(digest[3] & 0xFF));
+    return h;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+//                           ABS protocol functions                          //
+///////////////////////////////////////////////////////////////////////////////
+
+// Setups the Attribute Authority keys and public parameters
+// Dummy for now (using the GPV normal keygen)
+void setup() {}
+
+// Extracts an user key using a set of attributes and AA keys
 vector<shared_ptr<Matrix<Poly>>> extract(shared_ptr<GPVSignatureParameters<Poly>> m_params,
                                          const lbcrypto::GPVSignKey<Poly> &signKey,
                                          const lbcrypto::GPVVerificationKey<Poly> &verificationKey,
@@ -56,13 +82,12 @@ vector<shared_ptr<Matrix<Poly>>> extract(shared_ptr<GPVSignatureParameters<Poly>
     size_t n = m_params->GetILParams()->GetRingDimension();
     size_t k = m_params->GetK();
     size_t base = m_params->GetBase();
-    EncodingParams ep(std::make_shared<EncodingParamsImpl>(PlaintextModulus(512)));
 
     shared_ptr<typename Poly::Params> params = m_params->GetILParams();
     auto zero_alloc = Poly::Allocator(params, EVALUATION);
 
+    // Generate the syndrome matrix from a set of attributes
     Matrix<Poly> syndromeMatrix(zero_alloc, 1, 32);
-
     attributeHashGenerator(attributes, m_params, &syndromeMatrix);
 
     // Getting the trapdoor, its public matrix, perturbation matrix and gaussian
@@ -73,8 +98,10 @@ vector<shared_ptr<Matrix<Poly>>> extract(shared_ptr<GPVSignatureParameters<Poly>
 
     typename Poly::DggType &dggLargeSigma = m_params->GetDiscreteGaussianGeneratorLargeSigma();
 
+    // Set of solutions to the SIS problem will be the users attributes key
     vector<shared_ptr<Matrix<Poly>>> attributesKey;
 
+    // Sample a preimage for each syndrome
     for (int i = 0; i < static_cast<int>(syndromeMatrix.GetCols()); i++) {
         auto u = syndromeMatrix(0, i);
         Matrix<Poly> zHat = RLWETrapdoorUtility<Poly>::GaussSamp(
@@ -82,224 +109,107 @@ vector<shared_ptr<Matrix<Poly>>> extract(shared_ptr<GPVSignatureParameters<Poly>
         attributesKey.push_back(std::make_shared<Matrix<Poly>>(zHat));
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    //                                  TESTING                              //
-    ///////////////////////////////////////////////////////////////////////////
-
-    // std::cout << "ATTR" << std::endl << (syndromeMatrix).GetData() << std::endl;
-
-    // auto stddev = m_params->GetDiscreteGaussianGenerator().GetStd();
-    // auto gaussian_alloc = Poly::MakeDiscreteGaussianCoefficientAllocator(
-    //     params, COEFFICIENT, stddev);
-
-    // // Sample a discrete y vector
-    // Matrix<Poly> y(zero_alloc, A.GetCols(), A.GetRows(), gaussian_alloc);
-    // y.SwitchFormat();
-
-    // Poly secret = (A * y)(0, 0);
-
-    // std::cout << "SECRET" << std::endl << secret.GetValues() << std::endl;
-
-    // Poly test = syndromeMatrix(0, 0);
-    // Poly test2 = syndromeMatrix(0, 1);
-    // Poly test3 = syndromeMatrix(0, 6);
-    // Poly test4 = syndromeMatrix(0, 9);
-
-    // Poly test5 = test + test2 + test3 + test4;
-
-    // std::cout << test5.GetValues() << std::endl;
-
-    // Matrix<Poly> z1 = *attributesKey[0];
-    // Matrix<Poly> z2 = *attributesKey[1];
-    // Matrix<Poly> z3 = *attributesKey[6];
-    // Matrix<Poly> z4 = *attributesKey[9];
-
-    // Matrix<Poly> z5 = z1 + z2 + z3 + z4 + y;
-
-    // Poly result = (A * z5)(0, 0);
-
-    // Poly resultFinal = result - test5;
-
-    // std::cout << "SIGNAT" << std::endl << resultFinal.GetValues() << std::endl;
-
     return attributesKey;
 }
 
+// Signs a message using an attribute based key
 signatureABS sign(shared_ptr<GPVSignatureParameters<Poly>> m_params,
                   vector<shared_ptr<Matrix<Poly>>> attributesKey,
                   const lbcrypto::GPVVerificationKey<Poly> &verificationKey,
                   string message,
                   vector<string> attributeList){
 
-    EncodingParams ep(std::make_shared<EncodingParamsImpl>(PlaintextModulus(512)));
-
     // Get parameters from keys
     shared_ptr<typename Poly::Params> params = m_params->GetILParams();
     auto stddev = m_params->GetDiscreteGaussianGenerator().GetStd();
-
     auto zero_alloc = Poly::Allocator(params, EVALUATION);
     auto gaussian_alloc = Poly::MakeDiscreteGaussianCoefficientAllocator(
         params, COEFFICIENT, stddev);
 
     const Matrix<Poly> &A = verificationKey.GetVerificationKey();
 
-    // Sample a discrete y vector
+    // Sample a discrete gaussian y vector
     Matrix<Poly> y(zero_alloc, A.GetCols(), A.GetRows(), gaussian_alloc);
     y.SwitchFormat();
 
+    // This will be our secret that will grant the integrity to the signature
     Poly secret = (A * y)(0, 0);
 
-    std::cout << "SECRET" << std::endl << secret.GetValues() << std::endl;
-
-    vector<int64_t> digest;
-
+    // The secret will be concatenated with the message and everything will be
+    // hashed to a 32 bit tag, represented by a 32 unsigned integer
     string secretWithMessage;
 
     for (usint i = 0; i < secret.GetLength(); i++) {
         secretWithMessage.append(secret[i].ToString());
     }
-
     secretWithMessage.append(message);
 
-    // std::cout << "secretWithMessage" << std::endl << secretWithMessage << std::endl;
+    // Message tag generation
+    uint32_t h = compactDigest(m_params, secretWithMessage);
 
-    lbcrypto::HashUtil::Hash(secretWithMessage, lbcrypto::SHA_256, digest);
-    lbcrypto::Plaintext hashedText(std::make_shared<lbcrypto::CoefPackedEncoding>(
-                                       m_params->GetILParams(), ep, digest));
-
-    uint32_t h = 0;
-
-    h += ((uint32_t)(digest[0] & 0xFF)) << 24;
-    h += ((uint32_t)(digest[1] & 0xFF)) << 16;
-    h += ((uint32_t)(digest[2] & 0xFF)) << 8;
-    h += ((uint32_t)(digest[3] & 0xFF));
-
-    std::cout << "h: " << std::hex << h << std::dec << std::endl;
-    std::cout << "h (bin): " << std::bitset<32>(h) << std::endl;
-
+    // The signature will be a superposition of the SIS solutions (secret
+    // attributes keys) summed with the secret gaussian vector y
     Matrix<Poly> sig = y;
 
     for (int i = 0; i < 32; i++) {
         if ((h >> (31 - i)) & 0x1) {
-            std::cout << i << " ";
             sig += *attributesKey[i];
         }
     }
-    std::cout << std::endl;
 
-    // std::cout << "sig:" << sig.GetData() << std::endl;
-
+    // The full signature with the parameters consists of:
+    // - the attribute list for which this signature is valid
+    // - the message tag
+    // - the signature lattice point
     signatureABS *signature = new signatureABS(attributeList, h, sig);
-
-    ///////////////////////////////////////////////////////////////////////////
-    //                                  TESTING                              //
-    ///////////////////////////////////////////////////////////////////////////
-
-    Poly sigAux2(params, EVALUATION, true);
-
-    Matrix<Poly> syndromeMatrix(zero_alloc, 1, 32);
-    attributeHashGenerator(attributeList, m_params, &syndromeMatrix);
-
-    for (int i = 0; i < 32; i++) {
-        if ((h >> (31 - i)) & 0x1) {
-            std::cout << i << " ";
-            sigAux2 += syndromeMatrix(0, i);
-        }
-    }
-    std::cout << std::endl;
-
-    std::cout << "Aux2" << sigAux2.GetValues() << std::endl;
-
-    Poly ver = (A * sig)(0, 0);
-
-    std::cout << "ver" << ver.GetValues() << std::endl;
-
-    Poly result = ver - sigAux2;
-
-    std::cout << "result" << result.GetValues() << std::endl;
 
     return *signature;
 }
 
+// Verifies if the signature is valid for the message and the given attributes
 bool verify(shared_ptr<GPVSignatureParameters<Poly>> m_params,
             const lbcrypto::GPVVerificationKey<Poly> &verificationKey,
             string message,
             signatureABS signature){
 
-    std::cout << "VERIFY" << std::endl;
-
-    EncodingParams ep(std::make_shared<EncodingParamsImpl>(PlaintextModulus(512)));
-    vector<string> attributeList = signature.getAttributeList();
-    auto z = signature.getSignature();
-    unsigned int h = signature.getSignatureHash();
-
+    // Get common lattice parameters
     shared_ptr<Poly::Params> params = m_params->GetILParams();
     auto zero_alloc = Poly::Allocator(params, EVALUATION);
 
-    Matrix<Poly> syndromeMatrix(zero_alloc, 1, 32);
-
-    attributeHashGenerator(attributeList, m_params, &syndromeMatrix);
-
-    // std::cout << "ATTR" << std::endl << (syndromeMatrix).GetData() << std::endl;
-
-    // std::cout << "h: " << std::hex << h << std::dec << std::endl;
-    // std::cout << "h (bin): " << std::bitset<32>(h) << std::endl;
-    // std::cout << "sig:" << z.GetData() << std::endl;
+    // Get the parameters from the signature
+    vector<string> attributeList = signature.getAttributeList();
+    Matrix<Poly> z = signature.getSignature();
+    uint32_t h = signature.getSignatureHash();
 
     const Matrix<Poly> &A = verificationKey.GetVerificationKey();
 
+    // First part of the signature verification
     Poly sigAux = (A * z)(0, 0);
-    // sigAux.SwitchFormat();
 
-    std::cout << "ver" << sigAux.GetValues() << std::endl;
+    // Generate the public matrix for the signature attributes
+    Matrix<Poly> syndromeMatrix(zero_alloc, 1, 32);
+    attributeHashGenerator(attributeList, m_params, &syndromeMatrix);
 
+    // Second part of the signature verification
     Poly sigAux2(params, EVALUATION, true);
-
-    // std::cout << "AUX" << std::endl << sigAux2.GetValues() << std::endl;
 
     for (int i = 0; i < 32; i++) {
         if ((h >> (31 - i)) & 0x1) {
-            std::cout << i << " ";
             sigAux2 += syndromeMatrix(0, i);
         }
     }
 
-    std::cout << "Aux2" << sigAux2.GetValues() << std::endl;
+    // Final signature verification computation
+    Poly sigHat = sigAux - sigAux2;
 
-    std::cout << std::endl;
-
-    Poly sigComparator = sigAux - sigAux2;
-
-    std::cout << "result" << sigComparator.GetValues() << std::endl;
-
-    // std::cout << "sigComparatorString" << std::endl << sigComparator.GetValues() << std::endl;
-
-    string sigComparatorString;
-    for (uint i = 0; i < sigComparator.GetLength(); i++) {
-        sigComparatorString.append(sigComparator[i].ToString());
+    // Serialization of the array to generate the hash tag
+    string sigHatString;
+    for (uint i = 0; i < sigHat.GetLength(); i++) {
+        sigHatString.append(sigHat[i].ToString());
     }
+    sigHatString.append(message);
 
-    // std::cout << "sigComparatorString" << std::endl << sigComparatorString << std::endl;
+    uint32_t hHat = compactDigest(m_params, sigHatString);
 
-    sigComparatorString.append(message);
-
-    vector<int64_t> digest;
-    lbcrypto::HashUtil::Hash(sigComparatorString, lbcrypto::SHA_256, digest);
-    lbcrypto::Plaintext hashedText(std::make_shared<lbcrypto::CoefPackedEncoding>(
-                                       m_params->GetILParams(), ep, digest));
-
-    std::cout << "HASH" << std::endl;
-
-    std::cout << std::hex << h;
-    std::cout << std::dec << std::endl;
-
-    std::cout << "VER" << std::endl;
-
-    for (usint i = 0; i < 8; i++) {
-        std::cout << std::hex << digest[i];
-    }
-
-    std::cout << std::dec << std::endl;
-
-    return true;
+    return h == hHat;
 }

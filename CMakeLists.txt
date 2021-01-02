@@ -36,5 +36,4 @@ include_directories( lib )
 ###
 ### EXAMPLE:
 FILE(GLOB absLib lib/*.cpp)
-add_executable(gpv_old examples/gpv_orig.cpp ${absLib})
 add_executable(lattice-abs examples/abs.cpp ${absLib})

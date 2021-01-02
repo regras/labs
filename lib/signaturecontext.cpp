@@ -23,6 +23,7 @@
 
 #include "signaturecontext.h"
 #include "abs.h"
+#include "math/matrix.h"
 
 namespace lbcrypto {
   // Method for setting up a GPV context with specific parameters
@@ -73,16 +74,6 @@ namespace lbcrypto {
     m_scheme->KeyGen(m_params, sk, vk);
   }
 
-  // Method for signing a given plaintext
-  template <class Element>
-  void SignatureContext<Element>::Sign(const LPSignPlaintext<Element>& pt,
-                                       const LPSignKey<Element>& sk,
-                                       const LPVerificationKey<Element>& vk,
-                                       LPSignature<Element>* sign) {
-    m_scheme->Sign(m_params, sk, vk, pt, sign);
-  }
-
-
   // Method for offline phase of signing a given plaintext
   template <class Element>
   void SignatureContext<Element>::SignOfflinePhase(
@@ -99,14 +90,6 @@ namespace lbcrypto {
     m_scheme->SignOnline(m_params, sk, vk, pv, pt, signatureText);
   }
 
-  // Method for verifying the plaintext and signature
-  template <class Element>
-  bool SignatureContext<Element>::Verify(const LPSignPlaintext<Element>& pt,
-                                         const LPSignature<Element>& signature,
-                                         const LPVerificationKey<Element>& vk) {
-    return m_scheme->Verify(m_params, vk, signature, pt);
-  }
-
   // Method for key generation
   template <class Element>
   void SignatureContext<Element>::Setup(LPSignKey<Element>* sk,
@@ -115,23 +98,37 @@ namespace lbcrypto {
   }
 
   template <class Element>
-  void SignatureContext<Element>::Extract(const LPSignKey<Element>& sk,
-                                          const LPVerificationKey<Element>& vk,
-                                          vector<string> attributes) {
+  vector<shared_ptr<Matrix<Poly>>> SignatureContext<Element>::Extract(const LPSignKey<Element>& sk,
+                                                                      const LPVerificationKey<Element>& vk,
+                                                                      vector<string> attributes) {
 
     auto params = std::static_pointer_cast<GPVSignatureParameters<Element>>(m_params);
     const auto &signKey = static_cast<const GPVSignKey<Element> &>(sk);
     const auto &verificationKey = static_cast<const GPVVerificationKey<Element> &>(vk);
 
-    // extract(params, sk, vk, attributes);
-    auto key = extract(params, signKey, verificationKey, attributes);
+    return extract(params, signKey, verificationKey, attributes);
+  }
 
-    string msg = "ISSO EH UM TESTE";
-    string msg2 = "ISSO EH UM TESTEa";
+  template <class Element>
+  signatureABS SignatureContext<Element>::Sign(const LPVerificationKey<Element>& vk,
+                                       vector<shared_ptr<Matrix<Poly>>> attributesKey,
+                                       vector<string> attributeList,
+                                       string message) {
 
-    auto signature = sign(params, key, verificationKey, msg, attributes);
+    auto params = std::static_pointer_cast<GPVSignatureParameters<Element>>(m_params);
+    const auto &verificationKey = static_cast<const GPVVerificationKey<Element> &>(vk);
 
-    verify(params, verificationKey, msg, signature);
-    // verify(params, verificationKey, msg2, signature);
+    return sign(params, attributesKey, verificationKey, message, attributeList);
+  }
+
+  template <class Element>
+  bool SignatureContext<Element>::Verify(const LPVerificationKey<Element>& vk,
+                                         signatureABS signature,
+                                         string message) {
+
+    auto params = std::static_pointer_cast<GPVSignatureParameters<Element>>(m_params);
+    const auto &verificationKey = static_cast<const GPVVerificationKey<Element> &>(vk);
+
+    return verify(params, verificationKey, message, signature);
   }
 }  // namespace lbcrypto

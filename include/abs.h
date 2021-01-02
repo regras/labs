@@ -15,7 +15,8 @@ const std::string attributesList[] = {
     "Graduate",
     "Professor",
     "Electrical Engineering",
-    "Computer Science"
+    "Computer Science",
+    "CP>80"
 };
 
 class signatureABS {
