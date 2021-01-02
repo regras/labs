@@ -10,6 +10,7 @@ cmake_minimum_required (VERSION 3.5.1)
 
 project(demo CXX)
 set(CMAKE_CXX_STANDARD 11)
+# set(CMAKE_BUILD_TYPE Debug)
 
 find_package(Palisade)
 
@@ -27,8 +28,13 @@ link_directories( ${PALISADE_LIBDIR} )
 link_directories( ${OPENMP_LIBRARIES} )
 link_libraries( ${PALISADE_LIBRARIES} )
 
+include_directories( include )
+include_directories( lib )
+
 ### ADD YOUR EXECUTABLE(s) HERE
 ### add_executable( EXECUTABLE-NAME SOURCES )
 ###
 ### EXAMPLE:
-### add_executable( test demo-simple-example.cpp )
+FILE(GLOB absLib lib/*.cpp)
+add_executable(gpv_old examples/gpv_orig.cpp ${absLib})
+add_executable(lattice-abs examples/abs.cpp ${absLib})
