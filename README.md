@@ -1,4 +1,4 @@
-# Lattice ABS
+# LABS - Lattice Attribute Based Signature
 
 This project is a Proof of Concept (PoC), about an Attribute-Based Signature scheme using lattices.
 
