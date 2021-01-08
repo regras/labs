@@ -28,7 +28,7 @@ Start by getting the latest version of the PALISADE library [here](https://gitla
 After getting the PALISADE installed, you can clone this repository:
 
 ```
-$ git clone https://github.com/regras/labs <path/of/your/choice>
+$ git clone https://github.com/regras/labs.git <path/of/your/choice>
 ```
 
 Inside the newly cloned repository, create a directory to store the build files with:
