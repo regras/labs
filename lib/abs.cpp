@@ -4,7 +4,7 @@
 #include "signaturecontext.h"
 #include "utils/inttypes.h"
 #include "utils/memory.h"
-#include <bits/stdint-uintn.h>
+#include <stdint.h>
 #include <iostream>
 #include <memory>
 #include <ostream>
