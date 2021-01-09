@@ -1,16 +1,11 @@
 #include "abs.h"
-#include "math/matrix.h"
 #include "signature/gpv.h"
 #include "signaturecontext.h"
 #include "utils/inttypes.h"
 #include "utils/memory.h"
-#include <stdint.h>
-#include <iostream>
 #include <memory>
 #include <ostream>
 #include <ratio>
-#include <string>
-#include <vector>
 
 using namespace lbcrypto;
 
