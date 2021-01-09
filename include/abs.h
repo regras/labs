@@ -1,7 +1,7 @@
 #ifndef __ABS_H_
 #define __ABS_H_
 
-#include <bits/stdint-uintn.h>
+#include <stdint.h>
 #include <iostream>
 #include <string>
 #include <vector>
