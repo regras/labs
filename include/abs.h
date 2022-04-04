@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 #include "math/matrix.h"
-#include "signature/signaturecontext.h"
+#include "signaturecontext.h"
 
 using namespace lbcrypto;
 
